@@ -1,0 +1,24 @@
+{
+  "name": "traveling-santa",
+  "version": "1.0.0",
+  "description": "https://traveling-santa.reaktor.com",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --max-old-space-size=12288 --experimental-modules src/index.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://bitbucket.org/jrno/traveling-santa.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "homepage": "https://bitbucket.org/jrno/traveling-santa#readme",
+  "dependencies": {
+    "deg2rad": "^1.0.0",
+    "esr": "^0.10.0"
+  },
+  "devDependencies": {
+    "zlib": "^1.0.5"
+  }
+}
