@@ -15,6 +15,7 @@
   "license": "ISC",
   "homepage": "https://bitbucket.org/jrno/traveling-santa#readme",
   "dependencies": {
+    "async": "^2.6.1",
     "deg2rad": "^1.0.0",
     "esr": "^0.10.0"
   },

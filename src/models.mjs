@@ -8,17 +8,15 @@ export class Route {
   constructor(points, weight, distance) {
     this.points = points; 
     this.weight = weight;
-    this.coveredDistance = this.points[0].distanceFromBase + distance + this.points[this.points.length-1].distanceFromBase;
+    this.distance = distance; 
   }
   getPointIds() {
     return this.points.map(point => point.id);  
   }
   getTotalDistance() {
-    return this.coveredDistance;
-  }
-  hasDuplicates() {
-    const pointIds = this.points.map(p => p.id);
-    return new Set(pointIds).size !== pointIds.length;
+    return this.points[0].distanceFromBase + 
+           this.distance + 
+           this.points[this.points.length-1].distanceFromBase;
   }
   toString() {
     return this.points.map(p => p.id).join(",");
@@ -39,22 +37,10 @@ export class Point {
       29.315278
     );
   }
-
   addPath(point, distance) {
     this.paths.push({
       distance: distance,
       point: point  
     })  
-  }
-  sortPathsByDistance(searchDepth=2) {
-    this.paths = this.paths.sort((a,b) => a.distance > b.distance ? 1 : -1);
-    const nearByPlaces = Math.min(this.paths.filter(p => p.distance <= 1000).length, 3);
-    this.paths = this.paths.splice(0, Math.max(nearByPlaces, searchDepth));
-  }
-  getPaths() {
-    return this.paths;
-  }
-  getGiftWeight() {
-    return this.giftWeight;
   }
 }
