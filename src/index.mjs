@@ -1,25 +1,35 @@
 import { Route, Point } from './models.mjs';
 import { readPointsFromFile, distanceBetweenPoints } from './utils.mjs';
+import { writeCsv } from './utils.mjs';
 
 const MAX_WEIGHT_IN_GRAMS = 10000000; // Max weight of single gift run as grams
-const MAX_PATHS_PER_POINT = 6; // Amount of connections to make from point to other points
 
-// TODO: Can we use already computed paths or have faster access in route gen?
-// TODO: Parallel execution of route generation allows to bump up parameters
-// TODO: Check general best practices for performance
-// - minimize function object allocation
-// - minimize object size
-
-// Tasks:
-// - Paranna reittien luonnin suorituskykyä a) tehostamalla koodia ja b) poistamalla turhia vaihtoehtoja
-// - Tutki breadth size hommaa, aikaisemmin oli vain eka taso 3:lla ja loput defaultannut kahdeksi.
+// Target: ~700K-800K 
+//
+// #1 Baseline / 1000 : 3.7M km 
+// #2 Next iteration / 1000: 3.1M km (re-wrote generate routes function)
+// #3 Next iteration / 1000: 2.3M km (included three paths instead of two for distances under 1000km) 32s local
+// #4 Next iteration / 1000: 1.8M km (conditional starting and branch sizes depending on the progress)
+// 
+// Ideas:
+// - Can we use already computed paths or have faster access in route gen?
+// - Check how to optimize javascript code
+//
+// Todos:
+//
+// - Smarter branching in plan route. Not only by distance, but by next options considered to current weight
+// - Test & check optimization of planRoute, e.g remove the slice
+// - Fork process per / core for plan route => allows to use more options
+// - Parameterize all that affects the algorithm. Easier combination testing
 
 /**
- * For provided points fill possible paths with distances and distance from base camp
+ * Fill points with connections to one another (=paths). Function will calculate 
+ * distance between points and create paths from one point to another
  * 
- * @param points 
+ * @param points - all points
+ * @param maxNearestConnections - how many connections to nearest points to create
  */
-const processPointData = (points) => {
+const fillConnections = (points, maxNearestConnections) => {
 
   for (const point of points) {
     
@@ -34,18 +44,19 @@ const processPointData = (points) => {
 
     // Sort by distance, nearest first. Leave connections to X nearest nodes only.
     point.paths = point.paths.sort((a,b) => a.distance > b.distance ? 1 : -1);
-    point.paths = point.paths.slice(0, MAX_PATHS_PER_POINT);
+    point.paths = point.paths.slice(0, maxNearestConnections);
   }
 
   return points;
 }
 
 /**
- * Returns true if given path should be pursued in route generation
+ * Function to return true if given path is viable alternative in route planning, false
+ * if path cannot be used.
  * 
- * @param path - path containing distance and point object
+ * @param path - path object (with distance and point)
  * @param idsVisited - set of point ids that are already processed
- * @param idsInRoute - set of point id's already en route
+ * @param idsInRoute - set of point ids already en route
  * @param routeWeight - current route weight
  */
 const isViablePath = (path, idsVisited, idsInRoute, routeWeight) => {
@@ -55,15 +66,15 @@ const isViablePath = (path, idsVisited, idsInRoute, routeWeight) => {
 }
 
 /**
- * Generate array of Routes starting from given point.
+ * Recursive function to generate possible routes from given point
  * 
  * @param point - current point 
- * @param myPoints - all the points in route
- * @param totalWeight - combined weight of the current route
- * @param totalDistance  - combined distance covered in current route
- * @param ignoreIds - point id's to not pursue
- * @param results - result array holds all routes
- * @param branches - allowed paths to branch from single point
+ * @param myPoints - previous points in route
+ * @param totalWeight - combined weight in route
+ * @param totalDistance  - combined distance in route
+ * @param ignoreIds - point id's that should be ignored
+ * @param results - result array
+ * @param branches - number indicating how many branches to make, larger number indicates more permutations
  */
 const generateRoutesFromPoint = (point, myPoints, totalWeight, totalDistance, ignoreIds, results, branches = 2) => {
   
@@ -76,6 +87,7 @@ const generateRoutesFromPoint = (point, myPoints, totalWeight, totalDistance, ig
 
   // returns true if paths point is not processed, within current route and weight limit is ok
   const viablePaths = point.paths.filter((path) => isViablePath(path, ignoreIds, routePointIds, totalWeight))
+  // TODO: smarter selection of paths to pursue from viable paths
   const paths = (viablePaths.length > branches) ? viablePaths.slice(0, branches) : viablePaths;
 
   // terminate route if no options to continue
@@ -104,7 +116,7 @@ const generateRoutesFromPoint = (point, myPoints, totalWeight, totalDistance, ig
  * @param completed - array of point id's that should be skipped
  * @param branchSize - allowed branch size
  */
-const getNextRoute = (points, completed, branchSize) => {
+const planRoute = (points, completed, branchSize) => {
   let results = [];
   for (const point of points) {
     let routes = [];
@@ -116,17 +128,6 @@ const getNextRoute = (points, completed, branchSize) => {
   return results[0];
 }
 
-/**
- * Returns the next points to start from when creating possible routes
- * 
- * @param allPoints - array of points (all data)
- * @param processed  - array of point id's that are already processed
- * @param max - max elements to return
- */
-const nextStartingPoints = (allPoints, processed, max) => {
-  return allPoints.filter(p => !processed.has(p.id)).slice(0, max);
-}
-
 const sortByPointsAndDistance = (a, b) => {
   if (a.points.length === b.points.length) {
     return a.getTotalDistance() > b.getTotalDistance() ? 1 : -1;
@@ -134,43 +135,56 @@ const sortByPointsAndDistance = (a, b) => {
   return a.points.length < b.points.length ? 1 : -1;
 }
 
-// Target: ~700K-800K 
-//
-// #1 Baseline / 1000 : 3.7M km 
-// #2 Next iteration / 1000: 3.1M km (re-wrote generate routes function)
-// #3 Next iteration / 1000: 2.3M km (included three paths instead of two for distances under 1000km) 32s local
-// #4 Next iteration / 1000: 1.8M km (conditional starting and branch sizes depending on the progress)
+const run = (fileName, maxEntries, maxConnectionsFromPoint) => {
 
-// TODO: Important
-// - Best choice for starting point set & scaling of elements?
-// - Best choice of depth size to pursue depending on the complexity of the route.
+  const pointsRaw = readPointsFromFile(fileName).slice(0, maxEntries);
+  const pointsWithConnections = fillConnections(pointsRaw, maxConnectionsFromPoint);
+  const pointsCompleted = new Set();
+  const results = [];
 
-const points = readPointsFromFile('nicelist.txt').splice(0, 1000); 
-const allPoints = processPointData(points);
+  let totalDistance = 0;
+  let totalTrips = 0;
 
-const completed = new Set();
-const finalCsv = [];
-let finalDistance = 0;
-let giftRuns = 0;
+  while (pointsCompleted.size < pointsWithConnections.length) {
 
-while (completed.size < allPoints.length) {
+    const currentProgress = pointsCompleted.size / pointsWithConnections.length;
+    const nextBranchSize = currentProgress > 0.8 ? 4 : currentProgress > 0.5 ? 3 : 2; // 6/4/3 real
+    const nextStartingPointCount = 20;  // 100/30/15 real. 0.42s on 10, 2:20 on 20 per 1000 entries.
+    const nextStartingPoints = pointsWithConnections.filter(p => !pointsCompleted.has(p.id)).slice(0, nextStartingPointCount);
+    
+    // TODO: parallel execution of route computation with 4 workers
+    console.time("planRoute");
+    const plan = planRoute(nextStartingPoints, pointsCompleted, nextBranchSize);
+    console.timeEnd("planRoute");
 
-  const progress = completed.size / allPoints.length;
-  const routeBranchSize = progress > 0.8 ? 4 : progress > 0.5 ? 3 : 2; // 6/4/3 real
-  const routeStartingPoints = progress > 0.6 ? 25 : progress > 0.3 ? 5 : 2;  // 100/30/15 real
-  const startingPoints = nextStartingPoints(allPoints, completed, routeStartingPoints);
-  // TODO: parallel execution of route computation with 4 workers
-  const nextRoute = getNextRoute(startingPoints, completed, routeBranchSize);
-  const coveredPointIds = nextRoute.getPointIds();
-  const coveredDistance = nextRoute.getTotalDistance();
+    const planPointIds = plan.getPointIds();
+    planPointIds.forEach(id => pointsCompleted.add(id));
+    results.push(planPointIds);
+  
+    totalDistance += plan.getTotalDistance();;
+    totalTrips += 1;
+  
+    console.log(`${pointsWithConnections.length - pointsCompleted.size} unhappy children remaining. Breadth: ${nextBranchSize}, Batch: ${nextStartingPoints.length}, Children: ${planPointIds}`);
+  }
 
-  coveredPointIds.forEach(id => completed.add(id));
-  finalCsv.push(coveredPointIds);
-  finalDistance += coveredDistance;
-  giftRuns += 1;
-
-  console.log(`${allPoints.length - completed.size} unhappy children remaining. Breadth: ${routeBranchSize}, Batch: ${startingPoints.length}, Distance: ${coveredDistance}, Children: ${coveredPointIds}`);
+  console.log(`Visited ${pointsCompleted.size} children in ${totalTrips} trips covering ${totalDistance * 1000} meters`);
+  writeCsv(`${maxEntries}-${totalTrips}-${totalDistance}.csv`, results);
 }
 
-// TODO: Write csv
-console.log(`Visited ${completed.size} children in ${giftRuns} trips covering ${finalDistance * 1000} meters`);
+/////////
+
+console.time('run')
+run(
+  'nicelist.txt', 
+  1000,   // amount of entries to use from input file
+  6       // amount of connections to make from point to point (nearest first) 
+);
+console.timeEnd('run');
+
+
+
+
+
+
+
+

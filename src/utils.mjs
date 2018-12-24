@@ -18,6 +18,19 @@ export const readPointsFromFile = (filename, maxEntries = undefined) => {
 }
 
 /**
+ * Write arrays as csv
+ */
+export const writeCsv = (fileName, data, separator = ';', linebreak = '\n') => {
+  const csv = data.map(row => row.join(separator)).join(linebreak);
+  fs.writeFile(`./solutions/${fileName}`, csv, (err) => {
+    if (err) {
+      return console.error("csv export failed");
+    }
+    console.log(`${fileName} saved`);
+  });
+}
+
+/**
  * Returns the distance between two points (as kilometers)
  * 
  * @param R - Radius of the earth as kilometers
