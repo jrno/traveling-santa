@@ -74,6 +74,17 @@ export const fillConnections = (points, maxNearestConnections) => {
 }
 
 /**
+ * Select best route from multipe options
+ * 
+ * @param a 
+ * @param b 
+ */
+export const chooseBestRoute = (routes) => {
+  routes.sort(sortRoutes);
+  return routes[0];
+}
+
+/**
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
 export const sortRoutes = (a, b) => {

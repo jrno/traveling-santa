@@ -1,4 +1,4 @@
-import { readPointsFromFile, sortRoutes, writeCsv, shuffle } from './utils.mjs';
+import { readPointsFromFile, chooseBestRoute, writeCsv, shuffle } from './utils.mjs';
 
 /**
  * Find best route 
@@ -23,8 +23,7 @@ export const run = (workers, fileName, maxEntries) => {
       if (tripInProgress && tripRemainingPoints.length === 0) {
 
         tripInProgress = false;
-        tripResults.sort(sortRoutes);
-        const selectedRoute = tripResults[0];
+        const selectedRoute = chooseBestRoute(tripResults);
         const planPointIds = selectedRoute.points;
 
         totalCompletedPointIds = totalCompletedPointIds.concat(planPointIds);
@@ -67,7 +66,7 @@ export const run = (workers, fileName, maxEntries) => {
 
           tripProgressRatio = totalCompletedPointIds.length / allPointIds.length;
           tripInitialBranchSize = tripProgressRatio > 0.8 ? 6 : tripProgressRatio > 0.6 ? 5 : tripProgressRatio > 0.4 ? 4 : 3;
-          tripStartingPointCount = tripProgressRatio > 0.8 ? 400 : tripProgressRatio > 0.6 ? 300 : tripProgressRatio > 0.4 ? 200 : 100;
+          tripStartingPointCount = tripProgressRatio > 0.8 ? 300 : tripProgressRatio > 0.6 ? 200 : tripProgressRatio > 0.4 ? 100 : 50;
 
           tripRemainingPoints = shuffle(allPointIds.filter(id => !totalCompletedPointIds.includes(id)).slice(0, tripStartingPointCount))
           tripQueuedPoints = tripRemainingPoints.slice(0); // copy

@@ -4,6 +4,8 @@ import { run } from './main.mjs';
 import { runWorker } from './worker.mjs';
 
 // TODO:
+// - Check ideas.md
+// - Better algorithm to choose best route. Try to optimize for minimum remaining total distance.
 // - Use dynamic batch size and initial breadth. Lower breadth on each recursive call
 // - Shuffle starting points on each batch or atleast include best 10 from last run? now re-runs same points over and over again
 // - Optimize recursive code
