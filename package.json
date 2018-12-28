@@ -16,7 +16,8 @@
   "homepage": "https://bitbucket.org/jrno/traveling-santa#readme",
   "dependencies": {
     "cluster": "^0.7.7",
-    "deg2rad": "^1.0.0"
+    "deg2rad": "^1.0.0",
+    "redis": "^2.8.0"
   },
   "devDependencies": {
     "zlib": "^1.0.5"

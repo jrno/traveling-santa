@@ -74,20 +74,18 @@ export const fillConnections = (points, maxNearestConnections) => {
 }
 
 /**
- * Select best route from multipe options
- * 
- * @param a 
- * @param b 
- */
-export const chooseBestRoute = (routes) => {
-  routes.sort(sortRoutes);
-  return routes[0];
-}
-
-/**
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
 export const sortRoutes = (a, b) => {
+  // return sortByPointsAndDistance(a,b);
+  return sortByDistanceToPointRatio(a,b); // 1.9M vs 2.2M better algorithm with standard setting.
+}
+
+const sortByDistanceToPointRatio = (a, b) => {
+  return a.distanceToPointRatio > b.distanceToPointRatio ? 1 : -1;
+}
+
+const sortByPointsAndDistance = (a, b) => {
   if (a.points.length === b.points.length) {
     return a.distance > a.distance ? 1 : -1;
   }

@@ -1,30 +1,59 @@
 import cluster from 'cluster';
+import { promisify } from 'util';
+
 import { readPointsFromFile, fillConnections } from './utils.mjs';
 import { createRoute } from './models.mjs';
-import { sortRoutes } from './utils.mjs';
+import { sortRoutes as sortRoutesBy } from './utils.mjs';
 
 const MAX_WEIGHT_IN_GRAMS = 10000000; // max weight of single gift run as grams
-const MAX_PATHS_FOR_POINT = 5; // scale up for better results
+const MAX_PATHS_FOR_POINT = 3; // scale up for better results
 
-export const runWorker = (fileName, maxEntries) => {
+export const runWorker = (redisClient, fileName, maxEntries) => {
 
   console.log(`Worker ${process.pid} started`);
-  const pointsRaw = readPointsFromFile(fileName).slice(0, maxEntries);
-  const pointsWithConnections = fillConnections(pointsRaw, MAX_PATHS_FOR_POINT);
 
-  process.on('message', (msg) => {
+  // to be used with async/await
+  const cacheGet = promisify(redisClient.get).bind(redisClient);
+  const cacheSet = promisify(redisClient.set).bind(redisClient);
+  const cacheRemove = promisify(redisClient.del).bind(redisClient);
+
+  const points = readPointsFromFile(fileName).slice(0, maxEntries);
+  const graph = fillConnections(points, MAX_PATHS_FOR_POINT);
+
+  process.on('message', async (msg) => {
 
     const pointsCompleted = new Set(msg.pointsIdsCompleted);
-    const pointsToProcess = pointsWithConnections.filter(p => msg.pointIds.includes(p.id.toString()));
-    const bestRoute = pointsToProcess
-      .map(point => findBestRoute(point, [], 0, point.distanceFromBase, pointsCompleted, msg.branchSize))
-      .sort(sortRoutes)[0];
+    const pointsToProcess = graph.filter(p => msg.pointIds.includes(p.id.toString()));
+    const results = [];
 
+    for (const point of pointsToProcess) {
+
+      const routeStr = await cacheGet(point.id);
+      let bestRoute = undefined;
+
+      if (routeStr != null) {
+        const route = unstringifyRoute(routeStr); // TODO: Weight is string after unwrap
+        if (intersection(route.points, msg.pointsIdsCompleted).length > 0) {
+          await cacheRemove(point.id);
+        } else {
+          bestRoute = route;
+        }
+      }
+      
+      if (bestRoute === undefined) {
+        bestRoute = findBestRoute(point, [], 0, point.distanceFromBase, pointsCompleted, sortRoutesBy);
+        await cacheSet(point.id, stringifyRoute(bestRoute));
+      }
+
+      results.push(bestRoute);
+    }
+
+    results.sort(sortRoutesBy);
     process.send({
       workerId: msg.workerId,
       type: 'DATA',
       pointIds: msg.pointIds,
-      bestRoute: bestRoute
+      bestRoute: results[0] // pick the best of all
     });
   });
 
@@ -34,25 +63,16 @@ export const runWorker = (fileName, maxEntries) => {
   });
 }
 
-const sortPathsByDistance = (paths, totalWeight) => {
-  return paths.sort((a,b) => a.distance > b.distance ? 1 : -1)
+const stringifyRoute = (route) => route.points.join("-") + '|' + route.weight + '|' + route.distance;
+
+const unstringifyRoute = (str) => {
+  const fields = str.split('|');
+  return createRoute(fields[0].split('-'), fields[1], fields[2]);
 }
 
-const sortPathsByContinuationsAndDistance = (paths, totalWeight) => {
-  return paths.sort((a,b) => {
-    const aContinuations = a.point.paths
-    .map(nextPath => nextPath.point.giftWeight)
-    .filter(giftWeight => (a.point.giftWeight + giftWeight + totalWeight) < MAX_WEIGHT_IN_GRAMS).length;
-    const aPoints = (1000 - a.distance) + (aContinuations * 75) // TODO: Just negate ?
-    const bContinuations = b.point.paths
-    .map(nextPath => nextPath.point.giftWeight)
-    .filter(giftWeight => (b.point.giftWeight + giftWeight + totalWeight) < MAX_WEIGHT_IN_GRAMS).length;
-    const bPoints = (1000 - b.distance) + (bContinuations * 75)
-    return aPoints < bPoints ? 1 : -1;
-  });
-}
+const intersection = (first, second) => first.filter(id => second.indexOf(id) !== -1);
 
-const findBestRoute = (point, routePointIds, totalWeight, totalDistance, ignoreIds, branchSize) => {
+const findBestRoute = (point, routePointIds, totalWeight, totalDistance, ignoreIds, sortFunction) => {
   
   // Copy route state
   const route = routePointIds.slice(0);
@@ -67,18 +87,15 @@ const findBestRoute = (point, routePointIds, totalWeight, totalDistance, ignoreI
   }
 
   // Descend to next nodes
-  const prioritizedPaths = sortPathsByDistance(possiblePaths, totalWeight);
-  const nextPaths = (prioritizedPaths.length > branchSize) ? prioritizedPaths.slice(0, branchSize) : prioritizedPaths;
-  return nextPaths.map(path => {
+  return possiblePaths.map(path => {
     return findBestRoute(
       path.point,
       route,
       totalWeight + point.giftWeight,
       totalDistance + path.distance,
-      ignoreIds,
-      (Math.max(3, branchSize) - 1)
+      ignoreIds
     );
-  }).sort(sortRoutes)[0];
+  }).sort(sortFunction)[0];
 }
 
 /**

@@ -4,7 +4,8 @@ export const createRoute = (pointIds, weight, distance) => {
   return {
     points: pointIds,
     weight: weight,
-    distance: new Number(distance)
+    distance: new Number(distance),
+    distanceToPointRatio: distance / pointIds.length
   }
 }
 
