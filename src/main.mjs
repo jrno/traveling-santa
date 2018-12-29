@@ -1,14 +1,32 @@
 import { readPointsFromFile, writeCsv } from './utils.mjs';
 import { sortRoutes } from './utils.mjs';
+import * as R from 'ramda';
 
 /**
- * Find best route 
+ * Validate results against original point data. Helps to ensure that 
+ * no bugs exist in algorithm code (duplicate points etc. in final result)
  * 
- * @param workers - array of workers (initialized with cluster.fork())
- * @param fileName - filename to use as input
- * @param maxEntries - amount of records to slice from input
+ * @returns true if no errors were found and false otherwise
  */
-export const run = (workers, fileName, maxEntries) => {
+const validate = (pointIds, results) => {
+
+  const pointOccurrences = R.countBy(Math.floor)([].concat(...results));
+  if (Object.keys(pointOccurrences).length !== pointIds.length || 
+      Object.values(pointOccurrences).filter(val => val !== 1).length > 0) {
+      console.error(pointOccurrences);
+      return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Main branch. Solves the problem using provided config and workers
+ * 
+ * @param workers - array of workers started with cluster.fork()
+ * @param config - global config object
+ */
+export const run = (workers, config) => {
 
   const handleMessage = (msg) => {
 
@@ -16,45 +34,48 @@ export const run = (workers, fileName, maxEntries) => {
 
       workerStatus[msg.workerId] = 'IDLE';
       tripResults.push(msg.bestRoute);
+      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId)).slice(0, config.MAX_POINTS_FOR_TRIP);
       
-      // modify processed points
-      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId));
-      process.stdout.write(`${Math.floor(((allPointIds.length - tripRemainingPoints.length) / allPointIds.length) * 100)}%.. `)
-
+      // update current progress
+      const progress = Math.floor(((config.MAX_POINTS_FOR_TRIP - tripRemainingPoints.length) / config.MAX_POINTS_FOR_TRIP) * 100);
+      if (progress > 0) {
+        process.stdout.clearLine();
+        process.stdout.cursorTo(0);
+      } 
+      process.stdout.write(`${progress}%`)
+      
       if (tripInProgress && tripRemainingPoints.length === 0) {
-
-        tripInProgress = false;
+        process.stdout.clearLine();
+        process.stdout.cursorTo(0);
         tripResults.sort(sortRoutes);
         const selectedRoute = tripResults[0];
-        const planPointIds = selectedRoute.points;
+        const tripPointIds = selectedRoute.points;
 
-        totalCompletedPointIds = totalCompletedPointIds.concat(planPointIds);
-        totalResults.push(planPointIds);
-        totalDistance += selectedRoute.distance;
-        totalTrips += 1;      
+        totalCompletedPointIds = totalCompletedPointIds.concat(tripPointIds);
+        tripData.push(tripPointIds);
+        totalDistance += selectedRoute.distance;     
 
-        console.log("");
-        console.log(`Trip planner completed. Distance: ${totalDistance} & ${allPointIds.length - totalCompletedPointIds.length} remaining. Trip: ${planPointIds}`);
+        console.log(`#${tripId}. Distance: ${totalDistance}. ${(allPointIds.length - totalCompletedPointIds.length)} remains. [${tripPointIds}]`);
         tripResults = [];
+        tripInProgress = false;
       }
     }
   };
 
   workers.forEach((worker) => worker.on('message', handleMessage));
 
-  const allPointIds = readPointsFromFile(fileName).slice(0, maxEntries).map(p => p.id);
+  const allPointIds = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES).map(p => p.id);
   const workerStatus = workers.map(() => 'IDLE');
 
+  let tripId = 0;  
   let tripInProgress = false;
   let tripRemainingPoints = undefined; 
   let tripQueuedPoints = undefined; 
   let tripResults = [];
-  let tripId = 0;
+  let tripData = [];
 
   let totalCompletedPointIds = [];
-  let totalResults = [];
   let totalDistance = 0;
-  let totalTrips = 0;
 
   const nextAction = function() {
     setTimeout(() => {
@@ -65,19 +86,23 @@ export const run = (workers, fileName, maxEntries) => {
         if (totalCompletedPointIds.length < allPointIds.length) {
           
           tripId += 1;
-          tripRemainingPoints = allPointIds.filter(id => !totalCompletedPointIds.includes(id));
+          tripRemainingPoints = allPointIds.filter(id => !totalCompletedPointIds.includes(id)).slice(0, config.MAX_POINTS_FOR_TRIP);
           tripQueuedPoints = tripRemainingPoints.slice(0); // copy
           tripInProgress = true;
-          console.log(`Trip planner started. Points remaining: ${tripRemainingPoints.length}`);
           nextAction();
 
         } else {
 
           workers.forEach(worker => worker.kill());
-          console.log(`Visited ${totalCompletedPointIds.length} children in ${totalTrips} trips covering ${totalDistance * 1000} meters`);
-          writeCsv(`${maxEntries}-${totalTrips}-${totalDistance}.csv`, totalResults, () => {
-            process.exit();
-          });
+          console.log(`Visited ${totalCompletedPointIds.length} children in ${tripId} trips covering ${totalDistance * 1000} meters`);
+          if (validate(allPointIds, tripData)) {
+            writeCsv(`${config.MAX_ENTRIES}-${tripId}-${totalDistance}.csv`, tripData, () => {
+              process.exit();
+            });
+          } else {
+            console.error("result was not valid, check algorithm");
+            process.exit(1);
+          }
         }
 
       } else {
@@ -90,7 +115,7 @@ export const run = (workers, fileName, maxEntries) => {
             if (workerStatus[i] === 'IDLE') {
 
               const batchWork = [];
-              for (let d = Math.min(20, tripQueuedPoints.length); d > 0; --d) {
+              for (let d = Math.min(config.MAX_ITEMS_FOR_WORKER, tripQueuedPoints.length); d > 0; --d) {
                 batchWork.push(tripQueuedPoints.shift());
               }
 
@@ -98,9 +123,9 @@ export const run = (workers, fileName, maxEntries) => {
                 workerStatus[i] = 'BUSY';
                 workers[i].send({
                   tripId: tripId,
+                  tripData: tripData,
                   workerId: i,
                   pointIds: batchWork,
-                  pointsIdsCompleted: totalCompletedPointIds
                 });
               }
             }

@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node --max-old-space-size=12288 --experimental-modules src/index.mjs"
+    "start": "node --max-old-space-size=12288 --no-warnings --experimental-modules src/index.mjs"
   },
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   "dependencies": {
     "cluster": "^0.7.7",
     "deg2rad": "^1.0.0",
+    "ramda": "^0.26.1",
     "redis": "^2.8.0"
   },
   "devDependencies": {

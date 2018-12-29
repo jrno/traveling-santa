@@ -21,15 +21,8 @@ import { runWorker } from './worker.mjs';
 // - Clean up code and split main.mjs to functions, values to global scope. See examples on how to bind properly 
 //   from https://github.com/lvx3/cluster-cache/blob/master/cluster-node-cache.js
 // 
-// >> Try large branch size. 
-// Start point optimization instead of shuffle
-// 
 // - Check ideas.md
 // - Better algorithm to choose best route. Try to optimize for minimum remaining total distance.
-// - Use dynamic batch size and initial breadth. Lower breadth on each recursive call
-// - Shuffle starting points on each batch or atleast include best 10 from last run? now re-runs same points over and over again
-// - Optimize recursive code
-// - Cache already solved routes, somehow.
 
 // Target: ~700K-800K 
 // #1 Baseline / 1000 : 3.7M km 
@@ -39,19 +32,27 @@ import { runWorker } from './worker.mjs';
 
 /////////
 
-const FILE_NAME = 'nicelist.txt';
-const MAX_ENTRIES = 1000;
-const NUM_CPUS = os.cpus().length - 2;
 const redisClient = redis.createClient(); 
 
+const config = {  
+  FILE_NAME: 'nicelist.txt',
+  MAX_ENTRIES: 1000,
+  MAX_POINTS_FOR_TRIP: 150,
+  MAX_PATHS_FOR_POINT: 3,
+  MAX_ITEMS_FOR_WORKER: 5,
+  NUM_WORKERS: os.cpus().length
+}
+
 const startMaster = function() {
+
+  console.log(`starting to solve santa's traveling problem ${JSON.stringify(config, undefined, 2)}`);
 
   let workers = [];
   let workersPrepared = 0
 
   redisClient.flushdb((err) => {
     if (!err) {
-      console.log("redis state flushed");
+      console.log("in-memory cache cleared");
     }
   });
 
@@ -62,7 +63,7 @@ const startMaster = function() {
     }
   });
 
-  for (let i = 0; i < NUM_CPUS; ++i) {
+  for (let i = 0; i < config.NUM_WORKERS; ++i) {
     workers.push(cluster.fork());
   }
 
@@ -72,8 +73,7 @@ const startMaster = function() {
         console.log("Still waiting for all workers to initialize");
         waitWorkersToBoot();
       } else {
-        console.log("All workers prepared. Starting solver");
-        run(workers, FILE_NAME, MAX_ENTRIES);
+        run(workers, config);
       }
     }, 1000);
   };
@@ -82,7 +82,7 @@ const startMaster = function() {
 }
 
 const startWorker = function() {
-  runWorker(redisClient, FILE_NAME, MAX_ENTRIES);
+  runWorker(redisClient, config);
 }
 
 /// 

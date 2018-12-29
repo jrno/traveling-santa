@@ -6,23 +6,25 @@ import { createRoute } from './models.mjs';
 import { sortRoutes as sortRoutesBy } from './utils.mjs';
 
 const MAX_WEIGHT_IN_GRAMS = 10000000; // max weight of single gift run as grams
-const MAX_PATHS_FOR_POINT = 3; // scale up for better results
 
-export const runWorker = (redisClient, fileName, maxEntries) => {
+export const runWorker = (redisClient, config) => {
 
-  console.log(`Worker ${process.pid} started`);
+  console.log(`new worker process started. PID: ${process.pid}`);
 
   // to be used with async/await
   const cacheGet = promisify(redisClient.get).bind(redisClient);
   const cacheSet = promisify(redisClient.set).bind(redisClient);
   const cacheRemove = promisify(redisClient.del).bind(redisClient);
 
-  const points = readPointsFromFile(fileName).slice(0, maxEntries);
-  const graph = fillConnections(points, MAX_PATHS_FOR_POINT);
+  const points = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES);
+  const graph = fillConnections(points, config.MAX_PATHS_FOR_POINT);
 
   process.on('message', async (msg) => {
 
-    const pointsCompleted = new Set(msg.pointsIdsCompleted);
+    const tripData = msg.tripData;
+    const tripDataPoints = [].concat(...tripData);
+    const tripDataPointsUnique = new Set([].concat(...tripData));
+
     const pointsToProcess = graph.filter(p => msg.pointIds.includes(p.id.toString()));
     const results = [];
 
@@ -30,10 +32,10 @@ export const runWorker = (redisClient, fileName, maxEntries) => {
 
       const routeStr = await cacheGet(point.id);
       let bestRoute = undefined;
-
+      
       if (routeStr != null) {
         const route = unstringifyRoute(routeStr); // TODO: Weight is string after unwrap
-        if (intersection(route.points, msg.pointsIdsCompleted).length > 0) {
+        if (intersection(route.points, tripDataPoints).length > 0) {
           await cacheRemove(point.id);
         } else {
           bestRoute = route;
@@ -41,7 +43,7 @@ export const runWorker = (redisClient, fileName, maxEntries) => {
       }
       
       if (bestRoute === undefined) {
-        bestRoute = findBestRoute(point, [], 0, point.distanceFromBase, pointsCompleted, sortRoutesBy);
+        bestRoute = findBestRoute(point, [], 0, point.distanceFromBase, tripDataPointsUnique, sortRoutesBy);
         await cacheSet(point.id, stringifyRoute(bestRoute));
       }
 
@@ -108,7 +110,7 @@ const findBestRoute = (point, routePointIds, totalWeight, totalDistance, ignoreI
  * @param routeWeight - current route weight
  */
 const isViablePath = (path, idsVisited, idsInRoute, routeWeight) => {
-  return routeWeight + path.point.giftWeight <= MAX_WEIGHT_IN_GRAMS &&
-         !idsVisited.has(path.point.id) && 
-         !idsInRoute.includes(path.point.id) 
+  return !idsInRoute.includes(path.point.id) && 
+         routeWeight + path.point.giftWeight <= MAX_WEIGHT_IN_GRAMS &&
+         !idsVisited.has(path.point.id)
 }
