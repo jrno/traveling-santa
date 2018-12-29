@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node --max-old-space-size=12288 --no-warnings --experimental-modules src/index.mjs"
+    "start": "node --no-warnings --experimental-modules src/index.mjs"
   },
   "repository": {
     "type": "git",

@@ -73,10 +73,9 @@ export const run = (workers, config) => {
   let tripQueuedPoints = undefined; 
   let tripResults = [];
   let tripData = [];
-
   let totalCompletedPointIds = [];
   let totalDistance = 0;
-
+  
   const nextAction = function() {
     setTimeout(() => {
 

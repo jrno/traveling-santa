@@ -17,12 +17,6 @@ export const createPoint = (id, lat, lon, giftWeight) => {
     giftWeight: new Number(giftWeight),
     distanceFromBase: distanceBetweenPoints(lat, lon, 68.073611, 29.315278),
     paths: [],
+    connections: []
   }
-}
-
-export const addPath = (fromPoint, toPoint, distance) => {
-  fromPoint.paths.push({
-    distance: distance,
-    point: toPoint
-  });
 }

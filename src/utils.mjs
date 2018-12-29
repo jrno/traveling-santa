@@ -2,7 +2,8 @@ import fs from 'fs'
 import deg2rad from 'deg2rad'
 import zlib from 'zlib'
 import { createPoint } from './models.mjs';
-import { addPath } from './models.mjs';
+
+export const intersection = (first, second) => first.filter(id => second.indexOf(id) !== -1);
 
 /**
  * Reads the input file as an array of Points
@@ -42,43 +43,18 @@ export const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
   const a = 
     Math.sin(dLat/2) * Math.sin(dLat/2) +
     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-    ; 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
   const d = R * c; // distance in km
   return d;
 }
 
 /**
- * Fill points with connections to one another (=paths). Function will calculate 
- * distance between points and create paths from one point to another
- * 
- * @param points - all points
- * @param maxNearestConnections - how many connections to nearest points to create
- */
-export const fillConnections = (points, maxNearestConnections) => {
-
-  for (const p1 of points) {
-    for (const p2 of points) {
-      if (p1.id !== p2.id) {
-        addPath(p1, p2, distanceBetweenPoints(p1.lat, p1.lon, p2.lat, p2.lon));
-      }
-    }
-
-    // sort by distance, nearest first. Leave connections to X nearest nodes only.
-    p1.paths = p1.paths.sort((a,b) => a.distance > b.distance ? 1 : -1);
-    p1.paths = p1.paths.slice(0, maxNearestConnections);
-  }
-
-  return points;
-}
-
-/**
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
 export const sortRoutes = (a, b) => {
-  // return sortByPointsAndDistance(a,b);
-  return sortByDistanceToPointRatio(a,b); // 1.9M vs 2.2M better algorithm with standard setting.
+  return sortByPointsAndDistance(a,b);
+  // return sortByDistanceToPointRatio(a,b); // 1.9M vs 2.2M better algorithm with standard setting.
 }
 
 const sortByDistanceToPointRatio = (a, b) => {
