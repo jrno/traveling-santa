@@ -22,8 +22,8 @@ export const farthestPoints = (points, n = 10) => {
 
   do {
 
-    const resultIds = results.map(r => r.id);
-    const remainingPoints = points.filter(p => !resultIds.includes(p.id));
+    const resultIds = new Set(results.map(r => r.id));
+    const remainingPoints = points.filter(p => !resultIds.has(p.id));
 
     let randomPoint = remainingPoints[Math.floor(Math.random() * remainingPoints.length)];
     let paths = remainingPoints.map(p => asPath(randomPoint, p));

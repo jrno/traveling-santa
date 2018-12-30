@@ -19,7 +19,6 @@ const redisClient = redis.createClient();
 /**
  * FILE_NAME: Input data filename, in the working dir.
  * MAX_ENTRIES: How many records to slice from input file, undefined for no slicing
- * MAX_POINTS_FOR_TRIP: How many starting points to use in trip planner
  * GRAPH_DEPTH: Determines how many connections each point has to adjacent points (nearest)
  * MAX_ITEMS_FOR_WORKER: Determines the batch size sent for each worker
  * NUM_WORKERS: Worker processes to fork
@@ -28,8 +27,7 @@ const redisClient = redis.createClient();
 const config = {  
   FILE_NAME: 'nicelist.txt',
   MAX_ENTRIES: 1000,
-  MAX_POINTS_FOR_TRIP: 1000, // used 500 for 14.7M result
-  GRAPH_CONNECTIONS: 20,
+  GRAPH_CONNECTIONS: 25,
   MAX_ITEMS_FOR_WORKER: 5,
   NUM_WORKERS: os.cpus().length
 }

@@ -86,10 +86,6 @@ const findBestRoute = (point, routePointIds, routePointBag, previousWeight, prev
     return createRoute(route, previousWeight, previousDistance + point.distanceFromBase)
   }
 
-  // const pathSize = 3;
-  // eslint-disable-next-line no-nested-ternary
-  // const pathSize = depth < 15 ? 3 : depth < 20 ? 4 : 5;
-  // const pathSize = 4;
   return possiblePaths.map(path => {
     return findBestRoute(
       path.point,

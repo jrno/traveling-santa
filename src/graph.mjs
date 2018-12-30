@@ -6,7 +6,7 @@ export class Graph {
     this.points = points;
     this.depth = depth;
     this.points.forEach(p => {
-      p.paths = this.getPathsForPoint(p);
+      this.mapPaths(p);
     });
   }
 
@@ -24,7 +24,8 @@ export class Graph {
    * @param p1 - point from which paths are resolved
    * @param ignoreIds - all point id's to ignore in path generation
    */
-  getPathsForPoint(p1, ignoreIds = []) {
+  mapPaths(p1, ignoreIds = []) {
+
     let paths = [];
     for (const p2 of this.points) {
       if (p1.id !== p2.id && !ignoreIds.includes(p2.id)) {
@@ -36,7 +37,7 @@ export class Graph {
     }
 
     paths.sort((a,b) => a.distance > b.distance ? 1 : -1);
-    return paths.slice(0, this.depth);
+    p1.paths = paths.slice(0, this.depth);
   }
 
   /**
@@ -47,14 +48,14 @@ export class Graph {
    * @param allPointIds - array of all point ids visited so far
    */
   arrange(resolvedPointIds, allPointIds) {
-      
+
     // safe to drop visited children from the graph
     this.points = this.points.filter(point => !resolvedPointIds.includes(point.id));
 
     for (const p1 of this.points) {
       const connectedPointIds = p1.paths.map(path => path.point.id);
       if (intersection(connectedPointIds, resolvedPointIds).length > 0) {
-        p1.paths = this.getPathsForPoint(p1, allPointIds);
+        this.mapPaths(p1, allPointIds);
       }
     }
   }

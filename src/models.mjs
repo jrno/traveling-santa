@@ -1,10 +1,7 @@
 import { distanceBetweenPoints } from "./utils.mjs";
 
-// const primaryByPointsSecondaryDistance = (pointIds, weight, distance) => (pointIds.length * 10000) - distance
-const primaryByDistancePointRatio = (pointIds, weight, distance) => 10000 - distance / pointIds.length;
-
+const primaryByDistancePointRatio = (pointIds, weight, distance) => 0 - distance / pointIds.length;
 export const createRoute = (pointIds, weight, distance) => {
-
   return {
     points: pointIds,
     weight: weight,

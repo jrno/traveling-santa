@@ -34,10 +34,10 @@ export const run = (workers, config) => {
 
       workerStatus[msg.workerId] = 'IDLE';
       tripResults.push(msg.bestRoute);
-      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId)).slice(0, config.MAX_POINTS_FOR_TRIP);
+      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId)).slice(0, config.MAX_ENTRIES);
       
       // update current progress
-      const progress = Math.floor(((config.MAX_POINTS_FOR_TRIP - tripRemainingPoints.length) / config.MAX_POINTS_FOR_TRIP) * 100);
+      const progress = Math.floor(((config.MAX_ENTRIES - tripRemainingPoints.length) / config.MAX_ENTRIES) * 100);
       if (progress > 0) {
         process.stdout.clearLine();
         process.stdout.cursorTo(0);
@@ -86,8 +86,9 @@ export const run = (workers, config) => {
         if (totalCompletedPointIds.length < allPointIds.length) {
           
           tripId += 1;
-          tripRemainingPoints = farthestPoints(allPoints.filter(point => !totalCompletedPointIds.includes(point.id)), config.MAX_POINTS_FOR_TRIP).map(point => point.id);
-          tripQueuedPoints = tripRemainingPoints.slice(0); // copy
+          //tripRemainingPoints = farthestPoints(allPoints.filter(point => !totalCompletedPointIds.includes(point.id)), config.MAX_POINTS_FOR_TRIP).map(point => point.id);
+          tripRemainingPoints = allPoints.filter(point => !totalCompletedPointIds.includes(point.id), config.MAX_ENTRIES).map(point => point.id);
+          tripQueuedPoints = tripRemainingPoints.slice(0); 
           tripInProgress = true;
           nextAction();
 
