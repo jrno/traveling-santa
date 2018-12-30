@@ -28,8 +28,8 @@ const redisClient = redis.createClient();
 const config = {  
   FILE_NAME: 'nicelist.txt',
   MAX_ENTRIES: 1000,
-  MAX_POINTS_FOR_TRIP: 150, // used 500 for 14.7M result
-  GRAPH_CONNECTIONS: 3,
+  MAX_POINTS_FOR_TRIP: 1000, // used 500 for 14.7M result
+  GRAPH_CONNECTIONS: 20,
   MAX_ITEMS_FOR_WORKER: 5,
   NUM_WORKERS: os.cpus().length
 }

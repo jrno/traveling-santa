@@ -47,7 +47,7 @@ export const runWorker = (redisClient, config) => {
       }
       
       if (bestRoute === undefined) {
-        bestRoute = findBestRoute(point, [], 0, point.distanceFromBase, sortRoutesBy);
+        bestRoute = findBestRoute(point, [], new Set(), 0, point.distanceFromBase, sortRoutesBy);
         await cacheSet(point.id, JSON.stringify(bestRoute));
       }
 
@@ -69,25 +69,32 @@ export const runWorker = (redisClient, config) => {
   });
 }
 
-const findBestRoute = (point, routePointIds, previousWeight, previousDistance, sortFunction, depth = 0) => {
+const findBestRoute = (point, routePointIds, routePointBag, previousWeight, previousDistance, sortFunction, depth = 0) => {
   // TODO: Slice only if necessary before branching
   
   // Copy route state
   const currentWeight = previousWeight + point.giftWeight;
   const route = routePointIds.slice(0);
   route.push(point.id);
+  routePointBag.add(point.id);
 
   // Determine what paths can be pursued. 
   // If no viable options remain we'll end the route as recursions trivial case.
-  const possiblePaths = point.paths.filter((path) => isViablePath(path, routePointIds, currentWeight));
+  const possiblePaths = point.paths.filter((p) => isViablePath(p.point, routePointBag, currentWeight));
+  
   if (possiblePaths.length === 0) {
     return createRoute(route, previousWeight, previousDistance + point.distanceFromBase)
   }
 
+  // const pathSize = 3;
+  // eslint-disable-next-line no-nested-ternary
+  // const pathSize = depth < 15 ? 3 : depth < 20 ? 4 : 5;
+  // const pathSize = 4;
   return possiblePaths.map(path => {
     return findBestRoute(
       path.point,
       route,
+      routePointBag,
       currentWeight,
       previousDistance + path.distance,
       sortFunction,
@@ -101,11 +108,10 @@ const findBestRoute = (point, routePointIds, previousWeight, previousDistance, s
  * if path cannot be used.
  * 
  * @param path - path object (with distance and point)
- * @param idsVisited - set of point ids that are already processed
  * @param idsInRoute - array of point ids already en route
  * @param routeWeight - current route weight
  */
-const isViablePath = (path, idsInRoute, routeWeight) => {
-  return !idsInRoute.includes(path.point.id) && 
-         (routeWeight + path.point.giftWeight) <= MAX_WEIGHT_IN_GRAMS
+const isViablePath = (nextPoint, prevIds, routeWeight) => {
+  return !prevIds.has(nextPoint.id) && 
+         (routeWeight + nextPoint.giftWeight) <= MAX_WEIGHT_IN_GRAMS
 }

@@ -47,7 +47,7 @@ export class Graph {
    * @param allPointIds - array of all point ids visited so far
    */
   arrange(resolvedPointIds, allPointIds) {
-    
+      
     // safe to drop visited children from the graph
     this.points = this.points.filter(point => !resolvedPointIds.includes(point.id));
 
