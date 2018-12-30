@@ -1,4 +1,4 @@
-import { readPointsFromFile, writeCsv, farthestPoints } from './utils.mjs';
+import { readPointsFromFile, writeCsv } from './utils.mjs';
 import { sortRoutes } from './utils.mjs';
 import * as R from 'ramda';
 
@@ -34,10 +34,10 @@ export const run = (workers, config) => {
 
       workerStatus[msg.workerId] = 'IDLE';
       tripResults.push(msg.bestRoute);
-      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId)).slice(0, config.MAX_ENTRIES);
+      tripRemainingPoints = tripRemainingPoints.filter(pointId => !msg.pointIds.includes(pointId));
       
       // update current progress
-      const progress = Math.floor(((config.MAX_ENTRIES - tripRemainingPoints.length) / config.MAX_ENTRIES) * 100);
+      const progress = Math.floor(((tripLength - tripRemainingPoints.length) / tripLength) * 100);
       if (progress > 0) {
         process.stdout.clearLine();
         process.stdout.cursorTo(0);
@@ -69,6 +69,7 @@ export const run = (workers, config) => {
   const workerStatus = workers.map(() => 'IDLE');
 
   let tripId = 0;  
+  let tripLength = undefined;
   let tripInProgress = false;
   let tripRemainingPoints = undefined; 
   let tripQueuedPoints = undefined; 
@@ -86,8 +87,8 @@ export const run = (workers, config) => {
         if (totalCompletedPointIds.length < allPointIds.length) {
           
           tripId += 1;
-          //tripRemainingPoints = farthestPoints(allPoints.filter(point => !totalCompletedPointIds.includes(point.id)), config.MAX_POINTS_FOR_TRIP).map(point => point.id);
-          tripRemainingPoints = allPoints.filter(point => !totalCompletedPointIds.includes(point.id), config.MAX_ENTRIES).map(point => point.id);
+          tripRemainingPoints = allPoints.filter(point => !totalCompletedPointIds.includes(point.id)).map(point => point.id);
+          tripLength = tripRemainingPoints.length;
           tripQueuedPoints = tripRemainingPoints.slice(0); 
           tripInProgress = true;
           nextAction();
@@ -97,7 +98,7 @@ export const run = (workers, config) => {
           workers.forEach(worker => worker.kill());
           console.log(`Visited ${totalCompletedPointIds.length} children in ${tripId} trips covering ${totalDistance * 1000} meters`);
           if (validate(allPointIds, tripData)) {
-            writeCsv(`${config.MAX_ENTRIES}-${tripId}-${totalDistance}.csv`, tripData, () => {
+            writeCsv(`${allPoints.length}-${tripId}-${totalDistance}.csv`, tripData, () => {
               process.exit();
             });
           } else {

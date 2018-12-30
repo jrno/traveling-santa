@@ -13,6 +13,7 @@ const redisClient = redis.createClient();
 // #3 Next iteration / 1000: 2.3M km (included three paths instead of two for distances under 1000km) 32s local
 // #4 Next iteration / 1000: 1.8M km (conditional starting and branch sizes depending on the progress)
 // #5 Next iteration / 1000: 1.5M km (optimize graph after trip)
+// #6 Next iteration / 1000: 1.0M km (increase graph size)
 
 /////////
 
@@ -27,8 +28,8 @@ const redisClient = redis.createClient();
 const config = {  
   FILE_NAME: 'nicelist.txt',
   MAX_ENTRIES: 1000,
-  GRAPH_CONNECTIONS: 25,
-  MAX_ITEMS_FOR_WORKER: 5,
+  GRAPH_CONNECTIONS: 125,
+  MAX_ITEMS_FOR_WORKER: 10,
   NUM_WORKERS: os.cpus().length
 }
 

@@ -6,37 +6,6 @@ import { createPoint } from './models.mjs';
 export const intersection = (first, second) => first.filter(id => second.indexOf(id) !== -1);
 
 /**
- * Find n points with most spread
- */
-export const farthestPoints = (points, n = 10) => {
-
-  const asPath = (p1, p2) => {
-    return {
-      point: p2,
-      distance: distanceBetweenPoints(p1.lat,p1.lon,p2.lat,p2.lon)
-    };
-  };
-
-  const resultCount = Math.min(points.length, n);
-  const results = [];
-
-  do {
-
-    const resultIds = new Set(results.map(r => r.id));
-    const remainingPoints = points.filter(p => !resultIds.has(p.id));
-
-    let randomPoint = remainingPoints[Math.floor(Math.random() * remainingPoints.length)];
-    let paths = remainingPoints.map(p => asPath(randomPoint, p));
-    paths.sort((a,b) => a.distance < b.distance ? 1 : -1);
-    
-    results.push(paths[0].point);
-
-  } while (results.length < resultCount);
-
-  return results;
-}
-
-/**
  * Reads the input file as an array of Points
  */
 export const readPointsFromFile = (filename, maxEntries = undefined) => {
@@ -85,21 +54,5 @@ export const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
 export const sortRoutes = (a, b) => {
-  return sortByRouteScore(a,b);
-}
-
-const sortByRouteScore = (a, b) => {
   return a.score < b.score ? 1 : -1;
-}
-
-/**
- * Shuffles array in place. ES6 version
- * @param {Array} a items An array containing the items.
- */
-export const shuffle = (a) => {
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
 }
