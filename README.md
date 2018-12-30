@@ -4,10 +4,11 @@ https://traveling-santa.reaktor.com
 
 ## TODO
 
-- Refactor pointsWithConnections as Graph class.
-- Optimize Graph after each trip planning by checking when the tripId is changed and using the last data to swipe 
-  Optimize local graph in worker. Optimization includes removing all nodes that were selected from paths 
-  And using much larger initial path count.
+- Implement and analyze the effect of tail branching. Create two path versions for each point, x3 and x4. After
+a certain depth in the path use the extended branch. What about at very small depth? How does it affect
 
+- Implement point adjacency matrix. Each point should map other points within 100km,200km,300km,400km,500km etc. When ranking a route score, a route which picks most adjacent points would win. 100km = 10p, 200km = 9p, 300km = 8p etc.
 
-TODO: re-write graph method to return new paths as sorted. check if results are still the same. might be some bug?
+- Optimize worker startup by unzipping and reading the file data to redis. and reading it from there
+
+- Optimize the round startup time by improving the farthest x nodes search

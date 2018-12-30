@@ -17,7 +17,7 @@ export const runWorker = (redisClient, config) => {
   const cacheRemove = promisify(redisClient.del).bind(redisClient);
 
   const points = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES);
-  const graph = new Graph(points, config.GRAPH_DEPTH); // TODO: from config
+  const graph = new Graph(points, config.GRAPH_CONNECTIONS);
   let tripId = undefined;
 
   process.on('message', async (msg) => {
@@ -38,7 +38,7 @@ export const runWorker = (redisClient, config) => {
       let bestRoute = undefined;
 
       if (routeStr != null) {
-        const route = unstringifyRoute(routeStr); // TODO: Weight is string after unwrap
+        const route = JSON.parse(routeStr); // TODO: Weight is string after unwrap
         if (intersection(route.points, tripDataPoints).length > 0) {
           await cacheRemove(point.id);
         } else {
@@ -48,13 +48,13 @@ export const runWorker = (redisClient, config) => {
       
       if (bestRoute === undefined) {
         bestRoute = findBestRoute(point, [], 0, point.distanceFromBase, sortRoutesBy);
-        await cacheSet(point.id, stringifyRoute(bestRoute));
+        await cacheSet(point.id, JSON.stringify(bestRoute));
       }
 
       results.push(bestRoute);
     }
 
-    results.sort(sortRoutesBy);
+    results.sort(sortRoutesBy);    
     process.send({
       workerId: msg.workerId,
       type: 'DATA',
@@ -69,34 +69,29 @@ export const runWorker = (redisClient, config) => {
   });
 }
 
-const stringifyRoute = (route) => route.points.join("-") + '|' + route.weight + '|' + route.distance;
-
-const unstringifyRoute = (str) => {
-  const fields = str.split('|');
-  return createRoute(fields[0].split('-'), fields[1], fields[2]);
-}
-
-const findBestRoute = (point, routePointIds, totalWeight, totalDistance, sortFunction) => {
+const findBestRoute = (point, routePointIds, previousWeight, previousDistance, sortFunction, depth = 0) => {
+  // TODO: Slice only if necessary before branching
   
   // Copy route state
+  const currentWeight = previousWeight + point.giftWeight;
   const route = routePointIds.slice(0);
   route.push(point.id);
 
-  // TODO: Optimize this check by pre-processing node information before calculation with ignoreIds
-  const possiblePaths = point.paths.filter((path) => isViablePath(path, routePointIds, totalWeight))
-
-  // Terminate when no more options to pursue. Note that distance back to base is added to combined route distance
+  // Determine what paths can be pursued. 
+  // If no viable options remain we'll end the route as recursions trivial case.
+  const possiblePaths = point.paths.filter((path) => isViablePath(path, routePointIds, currentWeight));
   if (possiblePaths.length === 0) {
-    return createRoute(route, totalWeight, totalDistance + point.distanceFromBase)
+    return createRoute(route, previousWeight, previousDistance + point.distanceFromBase)
   }
 
-  // Descend to next nodes
   return possiblePaths.map(path => {
     return findBestRoute(
       path.point,
       route,
-      totalWeight + point.giftWeight,
-      totalDistance + path.distance
+      currentWeight,
+      previousDistance + path.distance,
+      sortFunction,
+      depth+1,
     );
   }).sort(sortFunction)[0];
 }
@@ -112,5 +107,5 @@ const findBestRoute = (point, routePointIds, totalWeight, totalDistance, sortFun
  */
 const isViablePath = (path, idsInRoute, routeWeight) => {
   return !idsInRoute.includes(path.point.id) && 
-         routeWeight + path.point.giftWeight <= MAX_WEIGHT_IN_GRAMS
+         (routeWeight + path.point.giftWeight) <= MAX_WEIGHT_IN_GRAMS
 }

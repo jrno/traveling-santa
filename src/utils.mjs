@@ -6,9 +6,41 @@ import { createPoint } from './models.mjs';
 export const intersection = (first, second) => first.filter(id => second.indexOf(id) !== -1);
 
 /**
+ * Find n points with most spread
+ */
+export const farthestPoints = (points, n = 10) => {
+
+  const asPath = (p1, p2) => {
+    return {
+      point: p2,
+      distance: distanceBetweenPoints(p1.lat,p1.lon,p2.lat,p2.lon)
+    };
+  };
+
+  const resultCount = Math.min(points.length, n);
+  const results = [];
+
+  do {
+
+    const resultIds = results.map(r => r.id);
+    const remainingPoints = points.filter(p => !resultIds.includes(p.id));
+
+    let randomPoint = remainingPoints[Math.floor(Math.random() * remainingPoints.length)];
+    let paths = remainingPoints.map(p => asPath(randomPoint, p));
+    paths.sort((a,b) => a.distance < b.distance ? 1 : -1);
+    
+    results.push(paths[0].point);
+
+  } while (results.length < resultCount);
+
+  return results;
+}
+
+/**
  * Reads the input file as an array of Points
  */
 export const readPointsFromFile = (filename, maxEntries = undefined) => {
+  // TODO: Store to redis and read from redis in workers.
   const file = fs.readFileSync(filename);
   const uncompressed = zlib.gunzipSync(file).toString();
   const points = uncompressed.split("\n").map((line) => {
@@ -53,19 +85,11 @@ export const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
 export const sortRoutes = (a, b) => {
-  return sortByPointsAndDistance(a,b);
-  // return sortByDistanceToPointRatio(a,b); // 1.9M vs 2.2M better algorithm with standard setting.
+  return sortByRouteScore(a,b);
 }
 
-const sortByDistanceToPointRatio = (a, b) => {
-  return a.distanceToPointRatio > b.distanceToPointRatio ? 1 : -1;
-}
-
-const sortByPointsAndDistance = (a, b) => {
-  if (a.points.length === b.points.length) {
-    return a.distance > a.distance ? 1 : -1;
-  }
-  return a.points.length < b.points.length ? 1 : -1;
+const sortByRouteScore = (a, b) => {
+  return a.score < b.score ? 1 : -1;
 }
 
 /**

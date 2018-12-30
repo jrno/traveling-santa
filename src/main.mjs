@@ -1,4 +1,4 @@
-import { readPointsFromFile, writeCsv } from './utils.mjs';
+import { readPointsFromFile, writeCsv, farthestPoints } from './utils.mjs';
 import { sortRoutes } from './utils.mjs';
 import * as R from 'ramda';
 
@@ -64,7 +64,8 @@ export const run = (workers, config) => {
 
   workers.forEach((worker) => worker.on('message', handleMessage));
 
-  const allPointIds = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES).map(p => p.id);
+  const allPoints = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES);
+  const allPointIds = allPoints.map(p => p.id);
   const workerStatus = workers.map(() => 'IDLE');
 
   let tripId = 0;  
@@ -75,7 +76,7 @@ export const run = (workers, config) => {
   let tripData = [];
   let totalCompletedPointIds = [];
   let totalDistance = 0;
-  
+
   const nextAction = function() {
     setTimeout(() => {
 
@@ -85,7 +86,7 @@ export const run = (workers, config) => {
         if (totalCompletedPointIds.length < allPointIds.length) {
           
           tripId += 1;
-          tripRemainingPoints = allPointIds.filter(id => !totalCompletedPointIds.includes(id)).slice(0, config.MAX_POINTS_FOR_TRIP);
+          tripRemainingPoints = farthestPoints(allPoints.filter(point => !totalCompletedPointIds.includes(point.id)), config.MAX_POINTS_FOR_TRIP).map(point => point.id);
           tripQueuedPoints = tripRemainingPoints.slice(0); // copy
           tripInProgress = true;
           nextAction();

@@ -28,9 +28,9 @@ const redisClient = redis.createClient();
 const config = {  
   FILE_NAME: 'nicelist.txt',
   MAX_ENTRIES: 1000,
-  MAX_POINTS_FOR_TRIP: 150,
-  GRAPH_DEPTH: 3,
-  MAX_ITEMS_FOR_WORKER: 3,
+  MAX_POINTS_FOR_TRIP: 150, // used 500 for 14.7M result
+  GRAPH_CONNECTIONS: 3,
+  MAX_ITEMS_FOR_WORKER: 5,
   NUM_WORKERS: os.cpus().length
 }
 
@@ -61,7 +61,7 @@ const startMaster = function() {
   const waitWorkersToBoot = () => {
     setTimeout(() => {
       if (workersPrepared < workers.length) {
-        console.log("Still waiting for all workers to initialize");
+        console.log(`${workers.length - workersPrepared} workers still not initialized`);
         waitWorkersToBoot();
       } else {
         run(workers, config);
