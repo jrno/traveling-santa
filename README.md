@@ -1,50 +1,32 @@
 # Overview
 
-Solution for Reaktors christmas puzzle _Traveling Santa_
+Solution for reaktor christmas puzzle [traveling santa](https://traveling-santa.reaktor.com)
 
-Puzzle problem was to find shortest overall distance for santa claus to deliver all the presents for 10k children. Each children had a one gift with predefined gift weight. Santa claus could only have 10.000kg at one trip, and then he would have to return to Korvatunturi.
+Problem was to find shortest overall distance for santa claus to deliver all the presents defined in the input file. From each child coordinates and gift weight was known. Santa claus could pack up maximum of 10.000kg worth of gifts at a time and then he'd need to return to Korvatunturi.
 
-https://traveling-santa.reaktor.com
+This solutions result was **8114372842** m calculated in 3 hours with MB pro with 2,2ghz Intel core i7 + 16gb ram. (~450k meters above the best score)
 
-Result **8114372842** meters calculated in 3 hours with MB pro with 2,2ghz Intel core i7 + 16gb ram. (~450k meters above the best score)
+## Running
+
+```npm start```
+
+Adjust index.js config MAX_ENTRIES for input size.
 
 ## Dependencies
 
 NodeJS v11.5 with flags --experimental-modules
 
-*cluster*
-
+**cluster**
 node cluster module to parallelize work across multiple workers. Solution used worker/cpu core.
 
-*redis* 
-
+**redis** 
 local in-memory cache to share computation data between workers to reduce required calculatio effort.
 
-*ramda*
-
+**ramda**
 Just few usages of ramda utility functions, could've used more..
 
-*deg2rad*
-
+**deg2rad**
 Conversion from degrees to radians in distance calculation.
 
-*zlib* 
-
+**zlib**
 Decompress file data
-
-## TODO:
-
-Work everything as more compact, more functional and readable if possible. Then final commit and to other challenges..
-
-index.mjs
-master.mjs
-worker.mjs
-util.mjs
-
-models/route.mjs
-models/graph.mjs
-models/point.mjs
-
-- master/worker variables to top of the module. assert that they arent seen in other modules
-- make sense to master.mjs the async loop etc.
-- max weight from config
