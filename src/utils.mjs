@@ -1,15 +1,21 @@
 import fs from 'fs'
 import deg2rad from 'deg2rad'
 import zlib from 'zlib'
-import { createPoint } from './models.mjs';
-
-export const intersection = (first, second) => first.filter(id => second.indexOf(id) !== -1);
+import createPoint from './models/point.mjs';
 
 /**
- * Reads the input file as an array of Points
+ * Intersection of two arrays as an array
  */
-export const readPointsFromFile = (filename, maxEntries = undefined) => {
-  // TODO: Store to redis and read from redis in workers.
+const intersection = (a, b) => a.filter(val => b.indexOf(val) !== -1);
+
+/**
+ * Read point data from provided file. Expects the file to be compressed.
+ * 
+ * @param filename - filename to read in workdir
+ * @param maxEntries - amount of points to read (undefined for all)
+ */
+const readPointsFromFile = (filename, maxEntries = undefined) => {
+
   const file = fs.readFileSync(filename);
   const uncompressed = zlib.gunzipSync(file).toString();
   const points = uncompressed.split("\n").map((line) => {
@@ -21,24 +27,11 @@ export const readPointsFromFile = (filename, maxEntries = undefined) => {
 }
 
 /**
- * Write arrays as csv
- */
-export const writeCsv = (fileName, data, callback, separator = ';', linebreak = '\n') => {
-  const csv = data.map(row => row.join(separator)).join(linebreak);
-  fs.writeFile(`./solutions/${fileName}`, csv, (err) => {
-    if (err) {
-      callback(err);
-    }
-    callback();
-  });
-}
-
-/**
  * Returns the distance between two points (as kilometers)
  * 
  * @param R - Radius of the earth as kilometers
  */
-export const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
+const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
   const dLat = deg2rad(lat2 - lat1); 
   const dLon = deg2rad(lon2 - lon1); 
   const a = 
@@ -53,6 +46,15 @@ export const distanceBetweenPoints = (lat1,lon1,lat2,lon2,R = 6378) => {
 /**
  * Sort two routes by amount of points (primary) and by lowest distance (secondary) 
  */
-export const sortRoutes = (a, b) => {
+const sortRoutes = (a, b) => {
   return a.score < b.score ? 1 : -1;
 }
+
+const api = {
+  intersection: intersection,
+  readPointsFromFile: readPointsFromFile,
+  distanceBetweenPoints: distanceBetweenPoints,
+  sortRoutes: sortRoutes
+}
+
+export default api;

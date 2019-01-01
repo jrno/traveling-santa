@@ -1,13 +1,11 @@
-import { distanceBetweenPoints, intersection } from './utils.mjs';
+import { default as util } from '../utils.mjs';
 
-export class Graph {
+class Graph {
 
   constructor(points, depth) {
     this.points = points;
     this.depth = depth;
-    this.points.forEach(p => {
-      this.mapPaths(p);
-    });
+    this.points.forEach(p => this.mapPaths(p));
   }
 
   /**
@@ -30,7 +28,7 @@ export class Graph {
     for (const p2 of this.points) {
       if (p1.id !== p2.id && !ignoreIds.includes(p2.id)) {
         paths.push({
-          distance: distanceBetweenPoints(p1.lat, p1.lon, p2.lat, p2.lon), // TODO: use local cached value
+          distance: util.distanceBetweenPoints(p1.lat, p1.lon, p2.lat, p2.lon), // TODO: use local cached value
           point: p2
         });
       }
@@ -54,9 +52,11 @@ export class Graph {
 
     for (const p1 of this.points) {
       const connectedPointIds = p1.paths.map(path => path.point.id);
-      if (intersection(connectedPointIds, resolvedPointIds).length > 0) {
+      if (util.intersection(connectedPointIds, resolvedPointIds).length > 0) {
         this.mapPaths(p1, allPointIds);
       }
     }
   }
 }
+
+export default Graph;

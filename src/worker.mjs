@@ -1,87 +1,103 @@
-import cluster from 'cluster';
 import { promisify } from 'util';
-import { readPointsFromFile, intersection } from './utils.mjs';
-import { Graph } from './graph';
-import { createRoute } from './models.mjs';
-import { sortRoutes as sortRoutesBy } from './utils.mjs';
+import Graph from './models/graph';
+import createRoute from './models/route.mjs';
+import { default as util } from './utils.mjs';
 
 const MAX_WEIGHT_IN_GRAMS = 10000000; // max weight of single gift run as grams
 
-export const runWorker = (redisClient, config) => {
+let cacheGet = undefined;
+let cacheSet = undefined;
+let cacheRemove = undefined;
+let tripId = undefined;
+let graph = undefined;
 
-  console.log(`new worker process started. PID: ${process.pid}`);
+const run = (redisClient, config) => {
 
-  // to be used with async/await
-  const cacheGet = promisify(redisClient.get).bind(redisClient);
-  const cacheSet = promisify(redisClient.set).bind(redisClient);
-  const cacheRemove = promisify(redisClient.del).bind(redisClient);
+  console.log(`worker started (pid #${process.pid})`);
+  const points = util.readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES);
 
-  const points = readPointsFromFile(config.FILE_NAME).slice(0, config.MAX_ENTRIES);
-  const graph = new Graph(points, config.GRAPH_CONNECTIONS);
-  let tripId = undefined;
+  cacheGet = promisify(redisClient.get).bind(redisClient);
+  cacheSet = promisify(redisClient.set).bind(redisClient);
+  cacheRemove = promisify(redisClient.del).bind(redisClient);
+  graph = new Graph(points, config.GRAPH_CONNECTIONS);
+  process.on('message', handleWorkAssignment);
 
-  process.on('message', async (msg) => {
-
-    const tripData = msg.tripData;
-    const tripDataPoints = [].concat(...tripData);
-
-    if (msg.tripId !== tripId && tripData && tripData.length > 0) {
-      graph.arrange(tripData[tripData.length-1], tripDataPoints);
-    }
-
-    const pointsToProcess = graph.getPoints(msg.pointIds);
-    const results = [];
-    
-    for (const point of pointsToProcess) {
-
-      const routeStr = await cacheGet(point.id);
-      let bestRoute = undefined;
-
-      if (routeStr != null) {
-        const route = JSON.parse(routeStr); // TODO: Weight is string after unwrap
-        if (intersection(route.points, tripDataPoints).length > 0) {
-          await cacheRemove(point.id);
-        } else {
-          bestRoute = route;
-        }
-      }
-      
-      if (bestRoute === undefined) {
-        bestRoute = findBestRoute(point, [], new Set(), 0, point.distanceFromBase, sortRoutesBy);
-        await cacheSet(point.id, JSON.stringify(bestRoute));
-      }
-
-      results.push(bestRoute);
-    }
-
-    results.sort(sortRoutesBy);    
-    process.send({
-      workerId: msg.workerId,
-      type: 'DATA',
-      pointIds: msg.pointIds,
-      bestRoute: results[0] // pick the best of all
-    });
-  });
-
+  // notify master that worker is ready
   process.send({
-    id: cluster.worker.id,
-    type: 'PREPARED',
+    id: process.pid, 
+    type: 'PREPARED', 
   });
 }
 
-const findBestRoute = (point, routePointIds, routePointBag, previousWeight, previousDistance, sortFunction, depth = 0) => {
-  // TODO: Slice only if necessary before branching
-  
-  // Copy route state
-  const currentWeight = previousWeight + point.giftWeight;
-  const route = routePointIds.slice(0);
-  route.push(point.id);
-  routePointBag.add(point.id);
+/**
+ * Handle work assignment from master and find the best route from given points
+ */
+const handleWorkAssignment = async (msg) => {
 
-  // Determine what paths can be pursued. 
-  // If no viable options remain we'll end the route as recursions trivial case.
-  const possiblePaths = point.paths.filter((p) => isViablePath(p.point, routePointBag, currentWeight));
-  
+  // collect all already completed nodes
+  const tripData = msg.tripData;
+  const tripDataPoints = [].concat(...tripData);
+
+  // optimize local graph by removing completed nodes
+  if (msg.tripId !== tripId && tripData && tripData.length > 0) {
+      graph.arrange(tripData[tripData.length-1], tripDataPoints);
+  }
+
+  const pointsToProcess = graph.getPoints(msg.pointIds);
+  const results = [];
+
+  // from given points find the winner, use cache to avoid unnecessary re-computation
+  for (const point of pointsToProcess) {
+
+    const routeStr = await cacheGet(point.id);
+    let bestRoute = undefined;
+
+    if (routeStr != null) {
+      const route = JSON.parse(routeStr);
+      if (util.intersection(route.points, tripDataPoints).length > 0) {
+        await cacheRemove(point.id);
+      } else {
+        bestRoute = route;
+      }
+    }
+    
+    if (bestRoute === undefined) {
+      bestRoute = findBestRoute(point, [], new Set(), 0, point.distanceFromBase, util.sortRoutesBy);
+      await cacheSet(point.id, JSON.stringify(bestRoute));
+    }
+
+    results.push(bestRoute);
+  }
+
+  // send winner back to master
+  process.send({
+    workerId: msg.workerId,
+    type: 'DATA',
+    pointIds: msg.pointIds,
+    bestRoute: results.sort(util.sortRoutesBy)[0] 
+  });
+}
+
+/**
+ * Recursive function to find best route starting from given point using the provided sort function
+ * 
+ * @param point - starting point
+ * @param routeIds - array of point ids en route
+ * @param routeIdsSet - set of point ids en route (faster lookup than array)
+ * @param previousWeight - route weight 
+ * @param previousDistance - route distance
+ * @param sort - fn used for picking the best route
+ */
+const findBestRoute = (point, routeIds, routeIdsSet, previousWeight, previousDistance, sort) => {
+
+  // copy state
+  const currentWeight = previousWeight + point.giftWeight;
+  const route = routeIds.slice(0);
+  route.push(point.id);
+  routeIdsSet.add(point.id);
+
+  // check next possible paths. If no paths remain we've arrived to trivial case
+  const possiblePaths = point.paths.filter((p) => isViablePath(p.point, routeIdsSet, currentWeight));
   if (possiblePaths.length === 0) {
     return createRoute(route, previousWeight, previousDistance + point.distanceFromBase)
   }
@@ -90,24 +106,19 @@ const findBestRoute = (point, routePointIds, routePointBag, previousWeight, prev
     return findBestRoute(
       path.point,
       route,
-      routePointBag,
+      routeIdsSet,
       currentWeight,
       previousDistance + path.distance,
-      sortFunction,
-      depth+1,
+      sort
     );
-  }).sort(sortFunction)[0];
+  }).sort(sort)[0];
 }
 
 /**
- * Function to return true if given path is viable alternative in route planning, false
- * if path cannot be used.
- * 
- * @param path - path object (with distance and point)
- * @param idsInRoute - array of point ids already en route
- * @param routeWeight - current route weight
+ * Returns true if next point is viable (won't exceed weight limit or has been seen)
  */
 const isViablePath = (nextPoint, prevIds, routeWeight) => {
-  return !prevIds.has(nextPoint.id) && 
-         (routeWeight + nextPoint.giftWeight) <= MAX_WEIGHT_IN_GRAMS
+  return !prevIds.has(nextPoint.id) && (routeWeight + nextPoint.giftWeight) <= MAX_WEIGHT_IN_GRAMS
 }
+
+export default run;

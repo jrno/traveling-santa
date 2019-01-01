@@ -17,10 +17,9 @@
   "dependencies": {
     "cluster": "^0.7.7",
     "deg2rad": "^1.0.0",
+    "delay": "^4.1.0",
     "ramda": "^0.26.1",
-    "redis": "^2.8.0"
-  },
-  "devDependencies": {
+    "redis": "^2.8.0",
     "zlib": "^1.0.5"
   }
 }

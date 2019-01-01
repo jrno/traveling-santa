@@ -1,84 +1,65 @@
 import cluster from 'cluster';
 import os from 'os';
 import redis from 'redis';
+import delay from 'delay';
 
-import { run } from './main.mjs';
-import { runWorker } from './worker.mjs';
+import { default as master } from './master.mjs';
+import { default as worker } from './worker.mjs';
 
 const redisClient = redis.createClient(); 
 
-// Target: ~700K-800K 
-// #1 Baseline / 1000 : 3.7M km 
-// #2 Next iteration / 1000: 3.1M km (re-wrote generate routes function)
-// #3 Next iteration / 1000: 2.3M km (included three paths instead of two for distances under 1000km) 32s local
-// #4 Next iteration / 1000: 1.8M km (conditional starting and branch sizes depending on the progress)
-// #5 Next iteration / 1000: 1.5M km (optimize graph after trip)
-// #6 Next iteration / 1000: 1.0M km (increase graph size)
-
-/////////
-
 /**
- * FILE_NAME: Input data filename, in the working dir.
- * MAX_ENTRIES: How many records to slice from input file, undefined for no slicing
- * GRAPH_DEPTH: Determines how many connections each point has to adjacent points (nearest)
- * MAX_ITEMS_FOR_WORKER: Determines the batch size sent for each worker
- * NUM_WORKERS: Worker processes to fork
+ * FILE_NAME: input data filename, file needs to be in project root.
+ * MAX_ENTRIES: x records to slice from input file. use 'undefined' for full solution
+ * GRAPH_DEPTH: x nearest nodes to map when building the graph
+ * MAX_ITEMS_FOR_WORKER: max nodes to send for a worker to process at once
+ * NUM_WORKERS: amount of workers
  */
 
 const config = {  
   FILE_NAME: 'nicelist.txt',
-  MAX_ENTRIES: 1000,
-  GRAPH_CONNECTIONS: 125,
+  MAX_ENTRIES: 1000, 
+  GRAPH_CONNECTIONS: 30,
   MAX_ITEMS_FOR_WORKER: 10,
   NUM_WORKERS: os.cpus().length
 }
 
-const startMaster = function() {
+/**
+ * Starts the solver by forking required workers, clearing local cache and starting the master in
+ * current process 
+ */
+const start = async () => {
 
-  console.log(`starting to solve santa's traveling problem ${JSON.stringify(config, undefined, 2)}`);
+  console.log(`application started: ${JSON.stringify(config, undefined, 2)}`);
 
   let workers = [];
   let workersPrepared = 0
 
-  redisClient.flushdb((err) => {
-    if (!err) {
-      console.log("in-memory cache cleared");
-    }
-  });
-
-  // Each worker takes a while to initialize. Wait until all workers are initialized
-  cluster.on('message', (worker, msg) => {
+  const listenForWorkerPrepared = (_worker, msg) => {
     if (msg.type === 'PREPARED') {
       workersPrepared += 1;
     }
-  });
-
-  for (let i = 0; i < config.NUM_WORKERS; ++i) {
-    workers.push(cluster.fork());
   }
 
-  const waitWorkersToBoot = () => {
-    setTimeout(() => {
-      if (workersPrepared < workers.length) {
-        console.log(`${workers.length - workersPrepared} workers still not initialized`);
-        waitWorkersToBoot();
-      } else {
-        run(workers, config);
-      }
-    }, 1000);
-  };
+  redisClient.flushdb((err) => (!err) 
+    ? console.log("redis cache cleared") 
+    : console.error('problem clearing redis'));
 
-  waitWorkersToBoot();
+  cluster.on('message', listenForWorkerPrepared);
+
+  [...Array(config.NUM_WORKERS)].forEach(() => workers.push(cluster.fork()));
+
+  // each worker prepares point data individually. it takes a while..
+  while (workersPrepared < config.NUM_WORKERS) {
+    await delay(1000);
+  }
+
+  cluster.removeListener('message', listenForWorkerPrepared);
+  master(workers, config);
 }
-
-const startWorker = function() {
-  runWorker(redisClient, config);
-}
-
-/// 
 
 if (cluster.isMaster) {
-  startMaster();
+  start();
 } else {
-  startWorker();
+  worker(redisClient, config);
 }
